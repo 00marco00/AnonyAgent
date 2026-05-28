@@ -59,7 +59,7 @@ Requires Node 20+.
 **One command, Windows / macOS / Linux:**
 
 ```sh
-npm install -g github:marco-misseri/AnonyAgent
+npm install -g github:00marco00/AnonyAgent
 ```
 
 Then launch it from any project directory:
@@ -85,7 +85,7 @@ That's it — the next message you type will be redacted locally and sent.
 ### Build from source
 
 ```sh
-git clone https://github.com/marco-misseri/AnonyAgent.git
+git clone https://github.com/00marco00/AnonyAgent.git
 cd AnonyAgent
 npm install
 npm run build
