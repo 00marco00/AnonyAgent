@@ -1,0 +1,42 @@
+{
+  "name": "anonyagent",
+  "version": "0.3.0",
+  "description": "AnonyAgent — privacy-first coding agent. Local PII redaction, then any cloud model.",
+  "type": "module",
+  "bin": {
+    "AnonyAgent": "./dist/cli.js",
+    "anonyagent": "./dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepare": "tsc",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "test": "node --test --import tsx dist-test-loader/*.test.js",
+    "test:tsx": "tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@xenova/transformers": "^2.17.2",
+    "chalk": "^5.3.0",
+    "dotenv": "^16.4.5",
+    "ink": "^5.0.1",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "openai": "^4.77.0",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^18.3.12",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
