@@ -1,6 +1,6 @@
 {
   "name": "anonyagent",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "AnonyAgent — privacy-first coding agent. Local PII redaction, then any cloud model.",
   "type": "module",
   "bin": {
@@ -14,7 +14,6 @@
   ],
   "scripts": {
     "build": "tsc",
-    "prepare": "tsc",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
     "test": "node --test --import tsx dist-test-loader/*.test.js",
