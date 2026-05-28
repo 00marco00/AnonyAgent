@@ -59,7 +59,7 @@ Requires Node 20+.
 **One command, Windows / macOS / Linux:**
 
 ```sh
-npm install -g github:00marco00/AnonyAgent
+npm install -g anonyagent
 ```
 
 Then launch it from any project directory:
@@ -70,6 +70,14 @@ AnonyAgent
 
 > macOS / Linux note: the binary is registered under two names so the shell
 > finds it whether you type `AnonyAgent` or `anonyagent`.
+>
+> The base install is regex-only (emails, phones, IBAN, credit cards, IPs,
+> URLs, paths, UUIDs, API keys, SSN). For the full local NER (names, orgs,
+> locations) install the optional dependencies too:
+> ```sh
+> npm install -g anonyagent --include=optional
+> ```
+> The NER model (~50–200 MB) downloads on first launch and is cached locally.
 
 On first launch you'll see a banner reminding you to set your API key. Inside
 the REPL:

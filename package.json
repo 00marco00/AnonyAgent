@@ -1,11 +1,11 @@
 {
   "name": "anonyagent",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "AnonyAgent — privacy-first coding agent. Local PII redaction, then any cloud model.",
   "type": "module",
   "bin": {
-    "AnonyAgent": "./dist/cli.js",
-    "anonyagent": "./dist/cli.js"
+    "AnonyAgent": "./dist/anonyagent.mjs",
+    "anonyagent": "./dist/anonyagent.mjs"
   },
   "files": [
     "dist/",
@@ -13,14 +13,15 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/bundle.mjs",
+    "build:tsc": "tsc",
+    "bundle": "node scripts/bundle.mjs",
     "dev": "tsx src/cli.ts",
-    "start": "node dist/cli.js",
-    "test": "node --test --import tsx dist-test-loader/*.test.js",
-    "test:tsx": "tsx --test src/**/*.test.ts"
+    "start": "node dist/anonyagent.mjs",
+    "test:tsx": "tsx --test src/anonymizer/pipeline.test.ts",
+    "prepublishOnly": "node scripts/bundle.mjs"
   },
   "dependencies": {
-    "@xenova/transformers": "^2.17.2",
     "chalk": "^5.3.0",
     "dotenv": "^16.4.5",
     "ink": "^5.0.1",
@@ -29,13 +30,35 @@
     "openai": "^4.77.0",
     "react": "^18.3.1"
   },
+  "optionalDependencies": {
+    "@xenova/transformers": "^2.17.2"
+  },
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@types/react": "^18.3.12",
+    "esbuild": "^0.28.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/00marco00/AnonyAgent.git"
+  },
+  "homepage": "https://github.com/00marco00/AnonyAgent#readme",
+  "bugs": {
+    "url": "https://github.com/00marco00/AnonyAgent/issues"
+  },
+  "license": "MIT",
+  "keywords": [
+    "privacy",
+    "pii",
+    "llm",
+    "agent",
+    "anonymization",
+    "redaction",
+    "cli"
+  ]
 }

@@ -10,22 +10,34 @@ type TokenClass = {
 
 type Pipeline = (text: string, opts?: unknown) => Promise<TokenClass[]>;
 
-let pipelinePromise: Promise<Pipeline> | null = null;
+/** Sentinel returned when the optional ML stack isn't installed. */
+const UNAVAILABLE = Symbol("NER unavailable");
+type MaybePipeline = Pipeline | typeof UNAVAILABLE;
+
+let pipelinePromise: Promise<MaybePipeline> | null = null;
 
 const DEFAULT_MODEL =
   process.env.ANONYAGENT_NER_MODEL ??
   "Xenova/bert-base-multilingual-cased-ner-hrl";
 
-async function getPipeline(): Promise<Pipeline> {
+async function getPipeline(): Promise<MaybePipeline> {
   if (!pipelinePromise) {
     pipelinePromise = (async () => {
-      // Lazy-load — transformers.js is heavy.
-      const { pipeline, env } = await import("@xenova/transformers");
-      // Disable telemetry, cache models locally.
-      env.allowLocalModels = true;
-      env.allowRemoteModels = true;
-      const p = await pipeline("token-classification", DEFAULT_MODEL);
-      return p as unknown as Pipeline;
+      try {
+        // Lazy-load — transformers.js is heavy AND optional. If the package
+        // isn't installed (or its native deps failed), bail to regex-only.
+        const mod = await import("@xenova/transformers");
+        const { pipeline, env } = mod as unknown as {
+          pipeline: (task: string, model: string) => Promise<unknown>;
+          env: { allowLocalModels: boolean; allowRemoteModels: boolean };
+        };
+        env.allowLocalModels = true;
+        env.allowRemoteModels = true;
+        const p = await pipeline("token-classification", DEFAULT_MODEL);
+        return p as unknown as Pipeline;
+      } catch {
+        return UNAVAILABLE;
+      }
     })();
   }
   return pipelinePromise;
@@ -93,6 +105,7 @@ function mergeBIO(tokens: TokenClass[], text: string): Entity[] {
 export async function detectNER(text: string, minScore = 0.85): Promise<Entity[]> {
   if (!text.trim()) return [];
   const pipe = await getPipeline();
+  if (pipe === UNAVAILABLE) return [];
   const raw = await pipe(text, { ignore_labels: [] });
   const merged = mergeBIO(raw, text);
   return merged.filter((e) => e.score >= minScore);
@@ -101,4 +114,9 @@ export async function detectNER(text: string, minScore = 0.85): Promise<Entity[]
 /** Pre-warm the model so the first user message isn't slow. */
 export async function warmupNER(): Promise<void> {
   await getPipeline();
+}
+
+/** Check whether the optional NER stack is installed and loadable. */
+export async function isNERAvailable(): Promise<boolean> {
+  return (await getPipeline()) !== UNAVAILABLE;
 }

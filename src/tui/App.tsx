@@ -16,7 +16,7 @@ import { fetchModels, filterModels, type ModelInfo } from "../llm/models.js";
 import { Session } from "../session.js";
 import { StreamingDeanonymizer } from "../anonymizer/deanonymize.js";
 import type { Entity } from "../anonymizer/types.js";
-import { warmupNER } from "../anonymizer/detectors/ner.js";
+import { isNERAvailable, warmupNER } from "../anonymizer/detectors/ner.js";
 import { appendHistory, loadHistory } from "../history.js";
 import { MultilineInput } from "./MultilineInput.js";
 import { runAgent, type AgentCallbacks } from "../agent/loop.js";
@@ -728,14 +728,15 @@ export function App({ flags }: { flags: CliFlags }) {
     (async () => {
       try {
         await warmupNER();
-        if (!cancelled) {
-          append({
-            kind: "system",
-            text: `ready · ${cwdRef.current}${sessionRef.current.project?.agentsMd ? " · AGENTS.md" : ""}${sessionRef.current.project?.rules ? " · rules" : ""}`,
-          });
-          appendNoKeyHintIfNeeded();
-          setMode({ kind: "chat" });
-        }
+        if (cancelled) return;
+        const nerOk = await isNERAvailable();
+        const suffix = `${sessionRef.current.project?.agentsMd ? " · AGENTS.md" : ""}${sessionRef.current.project?.rules ? " · rules" : ""}${nerOk ? "" : " · regex-only (install --include=optional for NER)"}`;
+        append({
+          kind: "system",
+          text: `ready · ${cwdRef.current}${suffix}`,
+        });
+        appendNoKeyHintIfNeeded();
+        setMode({ kind: "chat" });
       } catch (err) {
         if (!cancelled) {
           append({
