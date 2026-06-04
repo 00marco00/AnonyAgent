@@ -1,5 +1,7 @@
 import { detectRegex } from "./detectors/regex.js";
 import { detectNER } from "./detectors/ner.js";
+import { detectSecrets } from "./detectors/secrets.js";
+import { detectNamesByDictionary } from "./detectors/names.js";
 import { PlaceholderAllocator } from "./placeholders.js";
 import type { AnonymizationResult, Entity, EntityType } from "./types.js";
 
@@ -65,11 +67,18 @@ export async function anonymize(
   const allocator = opts.allocator ?? new PlaceholderAllocator();
 
   const regexHits = detectRegex(text);
+  const secretHits = detectSecrets(text);
+  const nameHits = detectNamesByDictionary(text);
   const nerHits = opts.skipNER
     ? []
     : await detectNER(text, opts.nerMinScore).catch(() => [] as Entity[]);
 
-  const merged = resolveOverlaps([...regexHits, ...nerHits]);
+  const merged = resolveOverlaps([
+    ...regexHits,
+    ...secretHits,
+    ...nameHits,
+    ...nerHits,
+  ]);
 
   // Replace from right to left to preserve indices.
   let out = text;

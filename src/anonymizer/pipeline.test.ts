@@ -45,6 +45,75 @@ describe("anonymize (regex only)", () => {
   });
 });
 
+describe("anonymize — widened secret detection", () => {
+  it("redacts xAI / HuggingFace / GitLab / JWT keys", async () => {
+    const r = await anonymize(
+      [
+        "xai key xai-abcdefghijklmnopqrstuvwxyz12345678",
+        "hf token hf_abcdefghijklmnopqrstuvwxyz123456",
+        "glpat-abcdefghijklmnopqrst",
+        "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+      ].join(" "),
+      { skipNER: true },
+    );
+    assert.match(r.anonymized, /\[API_KEY_1\]/);
+    assert.match(r.anonymized, /\[API_KEY_2\]/);
+    assert.match(r.anonymized, /\[API_KEY_3\]/);
+    assert.match(r.anonymized, /\[API_KEY_4\]/);
+  });
+
+  it("redacts secret-style assignments (env, JSON, Bearer)", async () => {
+    const r = await anonymize(
+      [
+        "API_KEY=Zm9vYmFyYmF6cXV1eDEyMzQ1Njc4OTA=",
+        '"password": "hunter2hunter2hunter2hunter2"',
+        "Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123",
+      ].join("\n"),
+      { skipNER: true },
+    );
+    // The keyword "password" / "API_KEY" is left visible; only the value is redacted.
+    assert.match(r.anonymized, /API_KEY=\[API_KEY_\d+\]/);
+    assert.match(r.anonymized, /"password":\s*"\[API_KEY_\d+\]"/);
+    assert.match(r.anonymized, /Bearer \[API_KEY_\d+\]/);
+  });
+
+  it("does not redact a long lowercase English word", async () => {
+    // High length, low entropy, single character class — should NOT match.
+    const r = await anonymize(
+      "this verylongwordwithoutanydigits should pass through",
+      { skipNER: true },
+    );
+    assert.equal(r.entities.length, 0);
+  });
+});
+
+describe("anonymize — dictionary-based PERSON detection", () => {
+  it("redacts common French and English first names", async () => {
+    const r = await anonymize(
+      "Hello Marco, ping Sophie and Alexandre about it.",
+      { skipNER: true },
+    );
+    assert.match(r.anonymized, /\[PERSON_1\]/);
+    assert.match(r.anonymized, /\[PERSON_2\]/);
+    assert.match(r.anonymized, /\[PERSON_3\]/);
+  });
+
+  it("redacts hyphenated names by their first component", async () => {
+    const r = await anonymize("Cc Jean-Marc and Marie-Claire", {
+      skipNER: true,
+    });
+    assert.match(r.anonymized, /\[PERSON_1\]/);
+    assert.match(r.anonymized, /\[PERSON_2\]/);
+  });
+
+  it("does not redact capitalized non-names like 'Hello' or 'Thursday'", async () => {
+    const r = await anonymize("Hello Thursday is a good day", {
+      skipNER: true,
+    });
+    assert.ok(!r.anonymized.includes("[PERSON"));
+  });
+});
+
 describe("deanonymize", () => {
   it("restores values from the reverse map", () => {
     const map = new Map([["[PERSON_1]", "Marco"]]);

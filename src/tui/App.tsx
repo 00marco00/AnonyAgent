@@ -528,10 +528,12 @@ function FooterHint({
   cfg,
   mode,
   autoAllow,
+  nerStatus,
 }: {
   cfg: Config;
   mode: Mode;
   autoAllow: boolean;
+  nerStatus: "unknown" | "on" | "off";
 }) {
   let left: React.ReactNode;
   switch (mode.kind) {
@@ -617,6 +619,14 @@ function FooterHint({
         ) : (
           <Text color="red" bold>○ no key</Text>
         )}
+        <Text color="gray">{"  │  "}</Text>
+        {nerStatus === "on" ? (
+          <Text color="green" bold>● ner</Text>
+        ) : nerStatus === "off" ? (
+          <Text color="yellow" bold>○ regex-only</Text>
+        ) : (
+          <Text color="gray">… ner</Text>
+        )}
         {autoAllow && (
           <>
             <Text color="gray">{"  │  "}</Text>
@@ -646,6 +656,9 @@ export function App({ flags }: { flags: CliFlags }) {
   const [history, setHistory] = useState<string[]>(() => loadHistory());
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
+  const [nerStatus, setNerStatus] = useState<"unknown" | "on" | "off">(
+    flags.warmup ? "unknown" : "off",
+  );
 
   const sessionRef = useRef(new Session());
   const clientRef = useRef<OpenAI | null>(cfg.apiKey ? createClient(cfg) : null);
@@ -730,7 +743,8 @@ export function App({ flags }: { flags: CliFlags }) {
         await warmupNER();
         if (cancelled) return;
         const nerOk = await isNERAvailable();
-        const suffix = `${sessionRef.current.project?.agentsMd ? " · AGENTS.md" : ""}${sessionRef.current.project?.rules ? " · rules" : ""}${nerOk ? "" : " · regex-only (install --include=optional for NER)"}`;
+        setNerStatus(nerOk ? "on" : "off");
+        const suffix = `${sessionRef.current.project?.agentsMd ? " · AGENTS.md" : ""}${sessionRef.current.project?.rules ? " · rules" : ""}${nerOk ? " · NER on" : " · regex+dict only (NER unavailable — run: npm i -g anonyagent --include=optional)"}`;
         append({
           kind: "system",
           text: `ready · ${cwdRef.current}${suffix}`,
@@ -739,9 +753,10 @@ export function App({ flags }: { flags: CliFlags }) {
         setMode({ kind: "chat" });
       } catch (err) {
         if (!cancelled) {
+          setNerStatus("off");
           append({
             kind: "system",
-            text: `NER unavailable, regex-only: ${formatError(err)}`,
+            text: `NER unavailable, regex+dict only: ${formatError(err)}`,
           });
           appendNoKeyHintIfNeeded();
           setMode({ kind: "chat" });
@@ -1254,7 +1269,12 @@ export function App({ flags }: { flags: CliFlags }) {
         />
       )}
 
-      <FooterHint cfg={cfg} mode={mode} autoAllow={flags.autoAllow} />
+      <FooterHint
+        cfg={cfg}
+        mode={mode}
+        autoAllow={flags.autoAllow}
+        nerStatus={nerStatus}
+      />
     </>
   );
 }

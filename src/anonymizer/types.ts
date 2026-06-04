@@ -22,7 +22,7 @@ export interface Entity {
   /** Confidence in [0, 1]. Regex matches use 1. */
   score: number;
   /** Source detector, useful for debugging/UI. */
-  source: "regex" | "ner";
+  source: "regex" | "ner" | "dict" | "heuristic";
 }
 
 export interface AnonymizationResult {

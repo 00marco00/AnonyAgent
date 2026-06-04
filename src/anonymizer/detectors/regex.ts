@@ -61,9 +61,53 @@ const RULES: RegexRule[] = [
   },
   {
     type: "API_KEY",
-    // Common prefixes: sk-, pk-, ghp_, gho_, xoxb-, AKIA, AIza...
-    pattern:
-      /\b(?:sk-[A-Za-z0-9_-]{20,}|pk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|gho_[A-Za-z0-9]{30,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35})\b/g,
+    // Vendor-prefixed keys. Order matters only for readability — the regex engine
+    // picks the longest valid alternation at each position.
+    pattern: new RegExp(
+      [
+        // OpenAI / Anthropic / OpenRouter / generic sk-
+        "sk-ant-[A-Za-z0-9_-]{30,}",
+        "sk-or-v\\d-[A-Za-z0-9_-]{30,}",
+        "sk-proj-[A-Za-z0-9_-]{30,}",
+        "sk-[A-Za-z0-9_-]{20,}",
+        // Stripe
+        "pk_(?:live|test)_[A-Za-z0-9]{20,}",
+        "sk_(?:live|test)_[A-Za-z0-9]{20,}",
+        "rk_(?:live|test)_[A-Za-z0-9]{20,}",
+        "pk-[A-Za-z0-9_-]{20,}",
+        // xAI / Groq / Mistral / Together / Fireworks / Perplexity / Cohere
+        "xai-[A-Za-z0-9]{30,}",
+        "gsk_[A-Za-z0-9]{30,}",
+        "pplx-[A-Za-z0-9]{30,}",
+        "co-[A-Za-z0-9]{30,}",
+        // Hugging Face / Replicate / Together
+        "hf_[A-Za-z0-9]{30,}",
+        "r8_[A-Za-z0-9]{30,}",
+        // GitHub PAT family + GitLab
+        "ghp_[A-Za-z0-9]{30,}",
+        "gho_[A-Za-z0-9]{30,}",
+        "ghs_[A-Za-z0-9]{30,}",
+        "ghu_[A-Za-z0-9]{30,}",
+        "ghr_[A-Za-z0-9]{30,}",
+        "github_pat_[A-Za-z0-9_]{20,}",
+        "glpat-[A-Za-z0-9_-]{20,}",
+        // Slack
+        "xox[abprso]-[A-Za-z0-9-]{10,}",
+        // AWS
+        "AKIA[0-9A-Z]{16}",
+        "ASIA[0-9A-Z]{16}",
+        // Google Cloud / Firebase
+        "AIza[0-9A-Za-z_-]{35}",
+        "ya29\\.[0-9A-Za-z_-]{20,}",
+        // Notion / SendGrid / Postman / Algolia
+        "secret_[A-Za-z0-9]{40,}",
+        "SG\\.[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{20,}",
+        "PMAK-[A-Za-z0-9-]{20,}",
+        // JWT (header.payload.signature)
+        "eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}",
+      ].join("|"),
+      "g",
+    ),
   },
   {
     type: "PATH",
