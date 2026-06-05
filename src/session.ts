@@ -69,7 +69,10 @@ export class Session {
     return this.project;
   }
 
-  async anonymizeUserMessage(content: string) {
-    return anonymize(content, { allocator: this.allocator });
+  async anonymizeUserMessage(content: string, manualRedactions?: string[]) {
+    return anonymize(content, {
+      allocator: this.allocator,
+      manualRedactions,
+    });
   }
 }

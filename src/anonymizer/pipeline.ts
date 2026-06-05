@@ -11,6 +11,32 @@ export interface AnonymizeOptions {
   skipNER?: boolean;
   /** Override default minimum NER confidence. */
   nerMinScore?: number;
+  /**
+   * Extra substrings the user explicitly marked for redaction. Each occurrence
+   * in the text is wrapped in a SECRET placeholder, taking priority over
+   * everything else.
+   */
+  manualRedactions?: string[];
+}
+
+function findAllOccurrences(text: string, needle: string): Entity[] {
+  if (!needle) return [];
+  const out: Entity[] = [];
+  let from = 0;
+  while (from <= text.length) {
+    const idx = text.indexOf(needle, from);
+    if (idx === -1) break;
+    out.push({
+      type: "SECRET",
+      start: idx,
+      end: idx + needle.length,
+      text: needle,
+      score: 1,
+      source: "manual",
+    });
+    from = idx + needle.length;
+  }
+  return out;
 }
 
 /**
@@ -18,16 +44,19 @@ export interface AnonymizeOptions {
  * Regex matches for structured data are more reliable than NER guesses.
  */
 const PRIORITY: Record<EntityType, number> = {
+  SECRET: 110,
+  HASH: 105,
   API_KEY: 100,
   CREDIT_CARD: 95,
   IBAN: 90,
   SSN: 90,
   EMAIL: 85,
+  IP: 85,
   PHONE: 80,
   UUID: 75,
   URL: 70,
-  IP: 65,
   PATH: 60,
+  ADDRESS: 55,
   DATE: 40,
   PERSON: 30,
   ORG: 25,
@@ -72,12 +101,16 @@ export async function anonymize(
   const nerHits = opts.skipNER
     ? []
     : await detectNER(text, opts.nerMinScore).catch(() => [] as Entity[]);
+  const manualHits = (opts.manualRedactions ?? []).flatMap((s) =>
+    findAllOccurrences(text, s),
+  );
 
   const merged = resolveOverlaps([
     ...regexHits,
     ...secretHits,
     ...nameHits,
     ...nerHits,
+    ...manualHits,
   ]);
 
   // Replace from right to left to preserve indices.
@@ -86,6 +119,7 @@ export async function anonymize(
   for (let i = merged.length - 1; i >= 0; i--) {
     const e = merged[i]!;
     const placeholder = allocator.allocate(e.type, e.text);
+    e.placeholder = placeholder;
     out = out.slice(0, e.start) + placeholder + out.slice(e.end);
     replacedEntities.unshift(e);
   }

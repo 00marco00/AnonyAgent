@@ -2,7 +2,7 @@ import type { Entity } from "../types.js";
 
 // Words that strongly suggest the value to their right is a secret.
 const SECRET_KEYS =
-  "api[_-]?key|apikey|api[_-]?secret|secret[_-]?key|access[_-]?token|auth[_-]?token|bearer[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|x-api-key|password|passwd|pwd|secret|token";
+  "api[_-]?key|apikey|api[_-]?secret|secret[_-]?key|access[_-]?key(?:[_-]?id)?|access[_-]?token|auth[_-]?token|bearer[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|x-api-key|aws[_-]?secret[_-]?access[_-]?key|aws[_-]?access[_-]?key[_-]?id|password|passwd|pwd|secret|token";
 
 // Match assignments like:
 //   API_KEY=abcdef...
@@ -19,6 +19,12 @@ const ASSIGNMENT = new RegExp(
 
 // Authorization headers, where Bearer/Basic prefix the token.
 const BEARER = /\b(?:Bearer|Basic|Token)\s+([A-Za-z0-9._~+/=-]{16,})\b/g;
+
+// AWS-style secret access keys: 40 chars from [A-Za-z0-9/+=], unprefixed.
+// Conservative: only fires when on a line that mentions AWS / secret / access,
+// to avoid grabbing any base64-ish blob.
+const AWS_SECRET_LINE =
+  /(?:aws|secret|access)[^\n]{0,40}?([A-Za-z0-9/+=]{40})\b/gi;
 
 // Conservative high-entropy detector: only fires for long alphanum tokens that
 // look obviously random. Designed to catch generic API keys without snagging
@@ -71,6 +77,15 @@ export function detectSecrets(text: string): Entity[] {
   // 2) Bearer / Basic / Token headers
   BEARER.lastIndex = 0;
   for (let m = BEARER.exec(text); m; m = BEARER.exec(text)) {
+    const val = m[1];
+    if (!val) continue;
+    const start = m.index + m[0].lastIndexOf(val);
+    pushSecret(out, start, start + val.length, val, "regex");
+  }
+
+  // 2b) AWS-style 40-char secret keys when the line mentions aws/secret/access.
+  AWS_SECRET_LINE.lastIndex = 0;
+  for (let m = AWS_SECRET_LINE.exec(text); m; m = AWS_SECRET_LINE.exec(text)) {
     const val = m[1];
     if (!val) continue;
     const start = m.index + m[0].lastIndexOf(val);

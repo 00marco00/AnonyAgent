@@ -55,7 +55,20 @@ export function parseArgs(argv: string[]): CliFlags {
 type Mode =
   | { kind: "warmup" }
   | { kind: "chat" }
-  | { kind: "review"; anonymized: string; entities: Entity[]; original: string }
+  | {
+      kind: "review";
+      anonymized: string;
+      entities: Entity[];
+      original: string;
+      manualRedactions: string[];
+    }
+  | {
+      kind: "editRedact";
+      anonymized: string;
+      entities: Entity[];
+      original: string;
+      manualRedactions: string[];
+    }
   | { kind: "streaming" }
   | {
       kind: "toolReview";
@@ -341,7 +354,10 @@ function ReviewView({
           {entities.map((e, i) => (
             <Text key={i}>
               {"  "}
-              <Text color={colorFor(e.type)}>{e.type.padEnd(12)}</Text>{" "}
+              <Text color={colorFor(e.type)} bold>
+                {(e.placeholder ?? `[${e.type}]`).padEnd(16)}
+              </Text>{" "}
+              <Text color="gray">←</Text>{" "}
               <Text bold>{JSON.stringify(e.text)}</Text>{" "}
               <Text color="gray">
                 ({e.source}
@@ -495,6 +511,64 @@ function ModelPickerView({
   );
 }
 
+function EditRedactView({
+  anonymized,
+  entities,
+  manualRedactions,
+  input,
+  onChange,
+  onSubmit,
+}: {
+  anonymized: string;
+  entities: Entity[];
+  manualRedactions: string[];
+  input: string;
+  onChange: (v: string) => void;
+  onSubmit: (v: string) => void;
+}) {
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="cyan"
+      paddingX={1}
+    >
+      <Text bold color="cyan">edit · add custom redaction</Text>
+      <Box marginTop={1} flexDirection="column">
+        <Text bold>current placeholders ({entities.length}):</Text>
+        {entities.map((e, i) => (
+          <Text key={i}>
+            {"  "}
+            <Text color={colorFor(e.type)} bold>
+              {(e.placeholder ?? `[${e.type}]`).padEnd(16)}
+            </Text>{" "}
+            <Text color="gray">←</Text>{" "}
+            <Text bold>{JSON.stringify(e.text)}</Text>
+          </Text>
+        ))}
+        {manualRedactions.length > 0 && (
+          <Text color="gray">
+            {"  "}({manualRedactions.length} manual added)
+          </Text>
+        )}
+      </Box>
+      <Box marginTop={1} flexDirection="column">
+        <Text bold>will send:</Text>
+        <Box marginLeft={2}>
+          <AnonymizedPreview text={anonymized} />
+        </Box>
+      </Box>
+      <Box marginTop={1}>
+        <Text>paste text to redact: </Text>
+        <TextInput value={input} onChange={onChange} onSubmit={onSubmit} />
+      </Box>
+      <Text color="gray">
+        enter to add as [SECRET_n] · empty enter or Esc to return to review
+      </Text>
+    </Box>
+  );
+}
+
 function LoginView({
   input,
   onChange,
@@ -551,6 +625,21 @@ function FooterHint({
       );
       break;
     case "review":
+      left = (
+        <Text>
+          <Text color="green" bold>Y</Text>
+          <Text color="white"> approve</Text>
+          <Text color="gray">{"  │  "}</Text>
+          <Text color="red" bold>N</Text>
+          <Text color="white"> deny</Text>
+          <Text color="gray">{"  │  "}</Text>
+          <Text color="cyan" bold>E</Text>
+          <Text color="white"> edit</Text>
+          <Text color="gray">{"  │  "}</Text>
+          <Text color="white">Esc cancel</Text>
+        </Text>
+      );
+      break;
     case "toolReview":
       left = (
         <Text>
@@ -561,6 +650,16 @@ function FooterHint({
           <Text color="white"> deny</Text>
           <Text color="gray">{"  │  "}</Text>
           <Text color="white">Esc cancel</Text>
+        </Text>
+      );
+      break;
+    case "editRedact":
+      left = (
+        <Text>
+          <Text color="cyan" bold>↵</Text>
+          <Text color="white"> add redaction</Text>
+          <Text color="gray">{"  │  "}</Text>
+          <Text color="white">Esc back</Text>
         </Text>
       );
       break;
@@ -665,6 +764,13 @@ export function App({ flags }: { flags: CliFlags }) {
   const idRef = useRef(0);
   const cwdRef = useRef(sessionRef.current.project?.root ?? process.cwd());
   const decisionRef = useRef<((approved: boolean) => void) | null>(null);
+  type ReviewFinalState = {
+    anonymized: string;
+    entities: Entity[];
+  } | null;
+  const reviewResolverRef = useRef<((state: ReviewFinalState) => void) | null>(
+    null,
+  );
 
   const append = (entry: Omit<TranscriptEntry, "id">) => {
     idRef.current += 1;
@@ -716,6 +822,18 @@ export function App({ flags }: { flags: CliFlags }) {
     return new Promise((resolve) => {
       decisionRef.current = resolve;
       setMode(next);
+    });
+  };
+
+  const askApprovalReview = (initial: {
+    anonymized: string;
+    entities: Entity[];
+    original: string;
+    manualRedactions: string[];
+  }): Promise<ReviewFinalState> => {
+    return new Promise((resolve) => {
+      reviewResolverRef.current = resolve;
+      setMode({ kind: "review", ...initial });
     });
   };
 
@@ -773,10 +891,10 @@ export function App({ flags }: { flags: CliFlags }) {
     if (key.ctrl && char === "c") app.exit();
   });
 
-  // Approve / deny for any review (entity or tool).
+  // Approve / deny for tool review (y/n only).
   useInput(
     (char, key) => {
-      if (mode.kind !== "review" && mode.kind !== "toolReview") return;
+      if (mode.kind !== "toolReview") return;
       if (char === "y" || char === "Y" || key.return) {
         const r = decisionRef.current;
         decisionRef.current = null;
@@ -787,7 +905,35 @@ export function App({ flags }: { flags: CliFlags }) {
         r?.(false);
       }
     },
-    { isActive: mode.kind === "review" || mode.kind === "toolReview" },
+    { isActive: mode.kind === "toolReview" },
+  );
+
+  // Approve / deny / edit for the entity review.
+  useInput(
+    (char, key) => {
+      if (mode.kind !== "review") return;
+      if (char === "e" || char === "E") {
+        setModalInput("");
+        setMode({
+          kind: "editRedact",
+          anonymized: mode.anonymized,
+          entities: mode.entities,
+          original: mode.original,
+          manualRedactions: mode.manualRedactions,
+        });
+        return;
+      }
+      if (char === "y" || char === "Y" || key.return) {
+        const r = reviewResolverRef.current;
+        reviewResolverRef.current = null;
+        r?.({ anonymized: mode.anonymized, entities: mode.entities });
+      } else if (char === "n" || char === "N" || key.escape) {
+        const r = reviewResolverRef.current;
+        reviewResolverRef.current = null;
+        r?.(null);
+      }
+    },
+    { isActive: mode.kind === "review" },
   );
 
   // ── Slash commands ───────────────────────────────────────────────────────
@@ -802,7 +948,7 @@ export function App({ flags }: { flags: CliFlags }) {
       case "/help":
         append({
           kind: "system",
-          text: "commands: /login · /model [search] · /endpoint <url> · /status · /map · /init · /create-rules [name] · /rules · /clear · /reset · /exit",
+          text: "commands: /login · /model [search] · /endpoint <url> · /status · /map (or /mappings) · /init · /create-rules [name] · /rules · /clear · /reset · /exit",
         });
         return true;
       case "/init": {
@@ -898,7 +1044,8 @@ export function App({ flags }: { flags: CliFlags }) {
         setTranscript([]);
         append({ kind: "system", text: "conversation + placeholder map reset" });
         return true;
-      case "/map": {
+      case "/map":
+      case "/mappings": {
         const map = sessionRef.current.allocator.reverseMap();
         if (map.size === 0)
           append({ kind: "system", text: "(no placeholders yet)" });
@@ -1087,21 +1234,23 @@ export function App({ flags }: { flags: CliFlags }) {
       return;
     }
 
-    const { anonymized, entities } =
+    let { anonymized, entities } =
       await sessionRef.current.anonymizeUserMessage(raw);
 
     if (!flags.autoAllow) {
-      const ok = await askApproval({
-        kind: "review",
+      const finalState = await askApprovalReview({
         anonymized,
         entities,
         original: raw,
+        manualRedactions: [],
       });
-      if (!ok) {
+      if (!finalState) {
         append({ kind: "system", text: "cancelled" });
         setMode({ kind: "chat" });
         return;
       }
+      anonymized = finalState.anonymized;
+      entities = finalState.entities;
     }
 
     append({ kind: "user", text: raw, entities });
@@ -1169,6 +1318,66 @@ export function App({ flags }: { flags: CliFlags }) {
     }
   };
 
+  // ── Edit-redaction submit ───────────────────────────────────────────────
+  const onEditRedactSubmit = async (value: string) => {
+    if (mode.kind !== "editRedact") return;
+    const v = value.trim();
+    setModalInput("");
+    if (!v) {
+      setMode({
+        kind: "review",
+        anonymized: mode.anonymized,
+        entities: mode.entities,
+        original: mode.original,
+        manualRedactions: mode.manualRedactions,
+      });
+      return;
+    }
+    if (!mode.original.includes(v)) {
+      append({
+        kind: "error",
+        text: `"${v}" not found in the original message — leaving redactions unchanged`,
+      });
+      setMode({
+        kind: "review",
+        anonymized: mode.anonymized,
+        entities: mode.entities,
+        original: mode.original,
+        manualRedactions: mode.manualRedactions,
+      });
+      return;
+    }
+    const nextManual = [...mode.manualRedactions, v];
+    const result = await sessionRef.current.anonymizeUserMessage(
+      mode.original,
+      nextManual,
+    );
+    setMode({
+      kind: "review",
+      anonymized: result.anonymized,
+      entities: result.entities,
+      original: mode.original,
+      manualRedactions: nextManual,
+    });
+  };
+
+  useInput(
+    (_char, key) => {
+      if (mode.kind !== "editRedact") return;
+      if (key.escape) {
+        setModalInput("");
+        setMode({
+          kind: "review",
+          anonymized: mode.anonymized,
+          entities: mode.entities,
+          original: mode.original,
+          manualRedactions: mode.manualRedactions,
+        });
+      }
+    },
+    { isActive: mode.kind === "editRedact" },
+  );
+
   // ── Login submit ────────────────────────────────────────────────────────
   const onLoginSubmit = (value: string) => {
     const v = value.trim();
@@ -1226,6 +1435,17 @@ export function App({ flags }: { flags: CliFlags }) {
 
       {mode.kind === "review" && (
         <ReviewView anonymized={mode.anonymized} entities={mode.entities} />
+      )}
+
+      {mode.kind === "editRedact" && (
+        <EditRedactView
+          anonymized={mode.anonymized}
+          entities={mode.entities}
+          manualRedactions={mode.manualRedactions}
+          input={modalInput}
+          onChange={setModalInput}
+          onSubmit={onEditRedactSubmit}
+        />
       )}
 
       {mode.kind === "toolReview" && (

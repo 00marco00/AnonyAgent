@@ -16,6 +16,20 @@ const NAMES_RAW = [
 
 const NAMES = new Set(NAMES_RAW.map((n) => n.toLowerCase()));
 
+// Words that happen to be in the names list but are far more often
+// countries / common nouns / greetings in real prose. Skipping them
+// avoids glaring false positives like "France" → PERSON.
+const STOPLIST = new Set([
+  "france","china","chine","india","inde","japan","japon","spain","espagne",
+  "italy","italie","mexico","mexique","canada","brazil","bresil","brésil",
+  "asia","asie","africa","afrique","america","amerique","amérique","europe",
+  "paris","london","londres","berlin","madrid","rome","tokyo","moscow",
+  "nice","lyon","marseille","bordeaux","toulouse","lille",
+  "may","june","april","mars","mai","juin","avril",
+  "rose","grace","hope","faith","joy","summer","autumn",
+  "harmony","heaven","destiny","mercy","trinity","prince","king",
+]);
+
 // Capitalized token, optionally hyphenated (Jean-Marc, Mary-Anne).
 // \p{Lu}/\p{Ll} cover accented letters in both FR and EN.
 const CAPITALIZED = /\b\p{Lu}\p{Ll}+(?:-\p{Lu}\p{Ll}+)?\b/gu;
@@ -33,6 +47,7 @@ export function detectNamesByDictionary(text: string): Entity[] {
     const tok = m[0];
     const lower = normalizeForLookup(tok);
     const head = lower.split("-")[0]!;
+    if (STOPLIST.has(lower) || STOPLIST.has(head)) continue;
     if (NAMES.has(lower) || NAMES.has(head)) {
       out.push({
         type: "PERSON",

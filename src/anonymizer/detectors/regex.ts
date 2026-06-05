@@ -41,8 +41,10 @@ const RULES: RegexRule[] = [
   },
   {
     type: "IBAN",
-    // 2 letters + 2 digits + 11..30 alphanum. Loose check, no checksum.
-    pattern: /\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/g,
+    // 2 letters + 2 digits + 11..30 alphanum, optionally split into 4-char groups
+    // by single spaces (FR76 3000 6000 0112 3456 7890 189 etc.). Loose, no checksum.
+    pattern: /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b/g,
+    validate: (m) => m.replace(/\s/g, "").length >= 15,
   },
   {
     type: "CREDIT_CARD",
@@ -51,9 +53,13 @@ const RULES: RegexRule[] = [
   },
   {
     type: "PHONE",
-    // International or local with separators; min 7 digits total.
-    pattern: /(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{1,4}\)[\s.-]?)?\d{2,4}(?:[\s.-]?\d{2,4}){2,4}/g,
-    validate: (m) => m.replace(/\D/g, "").length >= 7 && m.replace(/\D/g, "").length <= 15,
+    // International or local with separators; min 7 digits total. The leading
+    // `+CC ` country-code group is part of the match so the redaction covers it.
+    pattern: /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{1,4}\)[\s.-]?)?\d{1,4}(?:[\s.-]?\d{1,4}){2,7}/g,
+    validate: (m) => {
+      const digits = m.replace(/\D/g, "").length;
+      return digits >= 7 && digits <= 15;
+    },
   },
   {
     type: "UUID",
@@ -93,9 +99,11 @@ const RULES: RegexRule[] = [
         "glpat-[A-Za-z0-9_-]{20,}",
         // Slack
         "xox[abprso]-[A-Za-z0-9-]{10,}",
-        // AWS
-        "AKIA[0-9A-Z]{16}",
-        "ASIA[0-9A-Z]{16}",
+        // AWS — access keys are documented as 20 chars but the prefix-only
+        // class doesn't have a length anchor in the wild, so extend to word
+        // boundary to avoid leaving trailing chars unredacted.
+        "AKIA[0-9A-Z]{16,}",
+        "ASIA[0-9A-Z]{16,}",
         // Google Cloud / Firebase
         "AIza[0-9A-Za-z_-]{35}",
         "ya29\\.[0-9A-Za-z_-]{20,}",
@@ -119,6 +127,22 @@ const RULES: RegexRule[] = [
     type: "SSN",
     // US SSN. Easy to extend (FR NIR, etc.).
     pattern: /\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b/g,
+  },
+  {
+    type: "HASH",
+    // bcrypt ($2a/$2b/$2y$), argon2 ($argon2i/$argon2d/$argon2id$), scrypt
+    // ($scrypt$), PHC-style ($pbkdf2-sha256$). Catches the whole token until
+    // the next whitespace.
+    pattern:
+      /\$(?:2[aby]|argon2(?:i|d|id)?|scrypt|pbkdf2(?:-[a-z0-9]+)?|sha\d+|md5)\$[^\s]{8,}/g,
+  },
+  {
+    type: "ADDRESS",
+    // French-style postal address: house number + street + 5-digit postal code + city.
+    // Examples: "12 rue des Lilas, 06000 Nice", "1bis avenue de la République, 75011 Paris".
+    // Loose by design — favors over-redaction over leakage.
+    pattern:
+      /\b\d{1,4}(?:\s?(?:bis|ter|quater))?,?\s+(?:rue|avenue|av\.?|boulevard|bd\.?|bld\.?|place|impasse|chemin|allée|allee|route|rte\.?|quai|cours|passage|villa|square|sentier)\s+(?:de\s+la\s+|de\s+l['’]?|du\s+|des\s+|de\s+|d['’]?)?[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,40}(?:,\s*\d{5}\s+[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,40})?/gi,
   },
 ];
 

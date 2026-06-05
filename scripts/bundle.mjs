@@ -27,8 +27,9 @@ await build({
   // at the user's site. Our bundle requires them lazily so a missing install
   // falls back to regex-only.
   external: [
-    "@xenova/transformers",
+    "@huggingface/transformers",
     "onnxruntime-node",
+    "onnxruntime-web",
     "sharp",
   ],
   // ink imports react-devtools-core unconditionally even though it only

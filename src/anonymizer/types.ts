@@ -12,7 +12,10 @@ export type EntityType =
   | "UUID"
   | "API_KEY"
   | "SSN"
-  | "DATE";
+  | "DATE"
+  | "ADDRESS"
+  | "HASH"
+  | "SECRET";
 
 export interface Entity {
   start: number;
@@ -22,7 +25,9 @@ export interface Entity {
   /** Confidence in [0, 1]. Regex matches use 1. */
   score: number;
   /** Source detector, useful for debugging/UI. */
-  source: "regex" | "ner" | "dict" | "heuristic";
+  source: "regex" | "ner" | "dict" | "heuristic" | "manual";
+  /** Placeholder this entity was allocated to ("[EMAIL_1]"). Set by the pipeline. */
+  placeholder?: string;
 }
 
 export interface AnonymizationResult {

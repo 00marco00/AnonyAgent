@@ -24,9 +24,12 @@ async function getPipeline(): Promise<MaybePipeline> {
   if (!pipelinePromise) {
     pipelinePromise = (async () => {
       try {
-        // Lazy-load — transformers.js is heavy AND optional. If the package
+        // Lazy-load — transformers is heavy AND optional. If the package
         // isn't installed (or its native deps failed), bail to regex-only.
-        const mod = await import("@xenova/transformers");
+        // Use a dynamic specifier so esbuild leaves the import as runtime —
+        // the optional dep may legitimately be absent in regex-only installs.
+        const specifier = "@huggingface/transformers";
+        const mod = await import(specifier);
         const { pipeline, env } = mod as unknown as {
           pipeline: (task: string, model: string) => Promise<unknown>;
           env: { allowLocalModels: boolean; allowRemoteModels: boolean };
@@ -102,13 +105,30 @@ function mergeBIO(tokens: TokenClass[], text: string): Entity[] {
   return out;
 }
 
+// Common greetings / interjections the multilingual NER model frequently
+// mis-tags as PER/LOC. Compared lowercase + trimmed.
+const NER_STOPLIST = new Set([
+  "bonjour","bonsoir","salut","coucou","hello","hi","hey","yo","ciao","hola",
+  "merci","thanks","thank","please","stp","svp","ok","oui","non","yes","no",
+  "cher","chère","dear","madame","monsieur","sir","madam","mr","mrs","ms","dr",
+  "test","todo","fixme","note","warning","error","info","debug","tbd",
+]);
+
+function isNoiseHit(e: Entity): boolean {
+  const t = e.text.trim();
+  if (t.length < 2) return true;
+  if (!/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(t)) return true;
+  if (NER_STOPLIST.has(t.toLowerCase())) return true;
+  return false;
+}
+
 export async function detectNER(text: string, minScore = 0.85): Promise<Entity[]> {
   if (!text.trim()) return [];
   const pipe = await getPipeline();
   if (pipe === UNAVAILABLE) return [];
   const raw = await pipe(text, { ignore_labels: [] });
   const merged = mergeBIO(raw, text);
-  return merged.filter((e) => e.score >= minScore);
+  return merged.filter((e) => e.score >= minScore && !isNoiseHit(e));
 }
 
 /** Pre-warm the model so the first user message isn't slow. */
