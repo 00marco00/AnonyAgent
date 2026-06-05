@@ -65,7 +65,16 @@ const PRIORITY: Record<EntityType, number> = {
 
 /** Resolve overlapping entities: keep the higher-priority span, drop the rest. */
 function resolveOverlaps(entities: Entity[]): Entity[] {
-  const sorted = [...entities].sort((a, b) => {
+  // Drop exact-duplicate spans first so the same (type,start,end) tuple
+  // can't get replaced multiple times in the slice/concat loop.
+  const seen = new Set<string>();
+  const unique = entities.filter((e) => {
+    const k = `${e.type}:${e.start}:${e.end}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  const sorted = [...unique].sort((a, b) => {
     if (a.start !== b.start) return a.start - b.start;
     // Longer first on ties — usually better.
     return b.end - b.start - (a.end - a.start);

@@ -1,6 +1,6 @@
 {
   "name": "anonyagent",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "AnonyAgent — privacy-first coding agent. Local PII redaction, then any cloud model.",
   "type": "module",
   "bin": {

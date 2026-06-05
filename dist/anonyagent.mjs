@@ -19380,9 +19380,22 @@ function mergeBIO(tokens, text) {
 function isNoiseHit(e) {
   const t = e.text.trim();
   if (t.length < 2) return true;
+  if (t.length > MAX_NER_LEN) return true;
+  if (/[\n\r]/.test(t)) return true;
   if (!/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(t)) return true;
   if (NER_STOPLIST.has(t.toLowerCase())) return true;
   return false;
+}
+function dedupSpans(entities) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const e of entities) {
+    const key = `${e.type}:${e.start}:${e.end}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  return out;
 }
 async function detectNER(text, minScore = 0.85) {
   if (!text.trim()) return [];
@@ -19390,7 +19403,10 @@ async function detectNER(text, minScore = 0.85) {
   if (pipe === UNAVAILABLE) return [];
   const raw = await pipe(text, { ignore_labels: [] });
   const merged = mergeBIO(raw, text);
-  return merged.filter((e) => e.score >= minScore && !isNoiseHit(e));
+  const filtered = merged.filter(
+    (e) => e.score >= minScore && !isNoiseHit(e)
+  );
+  return dedupSpans(filtered);
 }
 async function warmupNER() {
   await getPipeline();
@@ -19398,7 +19414,7 @@ async function warmupNER() {
 async function isNERAvailable() {
   return await getPipeline() !== UNAVAILABLE;
 }
-var UNAVAILABLE, pipelinePromise, DEFAULT_MODEL, NER_STOPLIST;
+var UNAVAILABLE, pipelinePromise, DEFAULT_MODEL, NER_STOPLIST, MAX_NER_LEN;
 var init_ner = __esm({
   "src/anonymizer/detectors/ner.ts"() {
     "use strict";
@@ -19448,6 +19464,7 @@ var init_ner = __esm({
       "debug",
       "tbd"
     ]);
+    MAX_NER_LEN = 80;
   }
 });
 
@@ -21957,7 +21974,14 @@ function findAllOccurrences(text, needle) {
   return out;
 }
 function resolveOverlaps(entities) {
-  const sorted = [...entities].sort((a, b) => {
+  const seen = /* @__PURE__ */ new Set();
+  const unique = entities.filter((e) => {
+    const k = `${e.type}:${e.start}:${e.end}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  const sorted = [...unique].sort((a, b) => {
     if (a.start !== b.start) return a.start - b.start;
     return b.end - b.start - (a.end - a.start);
   });

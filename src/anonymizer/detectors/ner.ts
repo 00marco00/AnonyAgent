@@ -114,12 +114,33 @@ const NER_STOPLIST = new Set([
   "test","todo","fixme","note","warning","error","info","debug","tbd",
 ]);
 
+// A real PER/LOC/ORG fits in a short span: a name, a city, a company.
+// If the transformers backend returns a giant multi-line "entity", it's a
+// runaway merge — not a real named entity. Hard-cap the span.
+const MAX_NER_LEN = 80;
+
 function isNoiseHit(e: Entity): boolean {
   const t = e.text.trim();
   if (t.length < 2) return true;
+  if (t.length > MAX_NER_LEN) return true;
+  if (/[\n\r]/.test(t)) return true;
   if (!/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(t)) return true;
   if (NER_STOPLIST.has(t.toLowerCase())) return true;
   return false;
+}
+
+// Defensive dedup: same (type, start, end) triple should not appear twice.
+// Some transformer backends emit duplicate spans per token group.
+function dedupSpans(entities: Entity[]): Entity[] {
+  const seen = new Set<string>();
+  const out: Entity[] = [];
+  for (const e of entities) {
+    const key = `${e.type}:${e.start}:${e.end}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  return out;
 }
 
 export async function detectNER(text: string, minScore = 0.85): Promise<Entity[]> {
@@ -128,7 +149,10 @@ export async function detectNER(text: string, minScore = 0.85): Promise<Entity[]
   if (pipe === UNAVAILABLE) return [];
   const raw = await pipe(text, { ignore_labels: [] });
   const merged = mergeBIO(raw, text);
-  return merged.filter((e) => e.score >= minScore && !isNoiseHit(e));
+  const filtered = merged.filter(
+    (e) => e.score >= minScore && !isNoiseHit(e),
+  );
+  return dedupSpans(filtered);
 }
 
 /** Pre-warm the model so the first user message isn't slow. */
